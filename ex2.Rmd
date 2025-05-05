@@ -1,0 +1,164 @@
+---
+title: "Ex 2 PS2"
+output: pdf_document
+date: "2025-05-04"
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Ex 2
+```{r}
+library(tidyverse)
+library(MASS)
+library(ellipse)
+library(nnet)
+library(class)
+
+```
+
+
+
+
+```{r cars}
+glass<-read.table("data/glass.txt",header=T)
+glass$type<-factor(glass$type)
+levels(glass$type)<-c("WinF","WinNF","Veh","Con","Tabl","Head")
+table(glass$type)
+
+dim(glass)
+
+head(glass)
+```
+
+
+
+
+
+### Point 1
+\textbf{Point 1}
+```{r}
+lda.fit<-lda(glass$type ~ . ,data=glass)
+lda.fit
+```
+
+
+```{r}
+diag(diag(cov(glass[,1:9])** (1/2))) %*% lda.fit$scaling 
+```
+LD1 rimane influenzata da Na-Si-Al-Ca (tutti negativi->valori bassi=LD1 alto)
+LD2 rimane fortemente influenzata da Mg-Ca-Na-Si (tutti positivi->valori bassi=LD2 basso)
+
+
+### Point 2
+
+```{r}
+training_error <- mean(lda.pred$class != glass$type )
+training_error
+```
+the training error is as such
+
+let's check that our linear predictor predicts equally well all 
+
+```{r}
+lda.pred  <-predict(lda.fit,glass)
+conf.mat<-table(predicted=lda.pred$class,true=glass$type)
+conf.mat<-addmargins(conf.mat)
+```
+
+
+
+
+```{r}
+#ciclo for direi, creo accurency e c salvo dentro i valori
+accuracies<-c()
+for (i in 1:6) {
+  accuracies[i] <- conf.mat[i, i] / conf.mat[7, i]
+}
+accuracies
+```
+prima abbiamo trovato che l'errore medio è 1-training.err:0.6728972. con è gia al limite con 7 giuste su 13, ma il peggio ovviamente è in in Veh dove ne ha azzeccate 0 su 13, anzi peggio, ne ha predictate 3 tutte e tre sbagliate e non ha trovato neanche una di quelle giuste
+
+
+### Point 3
+```{r}
+cv.index <- read.csv("data/groupCV.txt",header = F)
+glass$index <- cv.index
+glass<-tibble(glass)
+```
+
+
+
+```{r}
+errors <- rep(NA,10)
+for (i in (1:10)){
+  training_set <- glass %>% filter(cv.index != i)
+  test_set <- glass %>% filter(cv.index == i)
+  lda.fit.cv <-lda(training_set$type ~ . , data= training_set)
+  lda.pred.cv <- predict(lda.fit.cv,test_set)
+  errors[i]<-mean(lda.pred.cv$class != test_set$type )
+}
+mean(errors)
+```
+Using the cv we get a more accurate view of the error rate of our classifier since we leverage the law of large numbers 
+
+
+```{r}
+lookup<-c("black", "blue", "brown", "gray60",
+"green3", "orange")
+names(lookup)<-as.character(unique(glass$type))
+
+```
+
+
+
+```{r}
+data.col<-lookup[glass$type]
+means.hat.z<-aggregate(lda.pred$x,by=list(glass$type),FUN=mean)[,-1]
+plot(LD2~LD1,xlim = c(0.0001, 4), 
+     data=lda.pred$x[,1:2],asp=1,pch=16,col=data.col)
+points(means.hat.z[,1],means.hat.z[,2],pch=21,bg=lookup,cex=1.2 )
+```
+
+Però guardando lo scatter ciò non ci sorprende(che il veh sia cosi difficile da sgamare). Blu-Nero e Brown sono dannatamente vicinissimi
+Veh(Brown) è stato confuso 11 volte con WinF(nero) e 3 volte con WinNF (b)
+ciò si ricollega con quanto dicevamo prima, qiesto non è un buon LDA
+
+### Point 5
+
+
+```{r}
+errors.reduced1<- rep(NA,5)
+errors.reduced2<- rep(NA,5)
+
+for (j in (1:5)){
+  errors.test<- rep(NA,10)
+  errors.training<- rep(NA,10)
+
+  for (i in (1:10)){
+    training_set <- glass %>% filter(cv.index != i)
+    test_set <- glass %>% filter(cv.index == i)
+    
+    lda.fit.cv <-lda(training_set$type ~ . , data= training_set)
+    lda.pred.test.cv <- predict(lda.fit.cv,test_set, dim = j )
+    errors.test[i]<-mean(lda.pred.test.cv$class != test_set$type )
+    
+
+  }
+  
+  lda.pred<-predict(lda.fit,glass,dimen=j)
+  errors.reduced2[j]<-mean(lda.pred$class!=glass$type)
+
+  errors.reduced1[j]<-mean(errors.test)
+}
+print(errors.reduced1)
+errors.reduced2
+```
+
+
+
+
+
+
