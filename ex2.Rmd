@@ -130,12 +130,11 @@ ciò si ricollega con quanto dicevamo prima, qiesto non è un buon LDA
 
 
 ```{r}
-errors.reduced1<- rep(NA,5)
-errors.reduced2<- rep(NA,5)
+errors.train.reduced<- rep(NA,5)
+errors.test.reduced<- rep(NA,5)
 
 for (j in (1:5)){
   errors.test<- rep(NA,10)
-  errors.training<- rep(NA,10)
 
   for (i in (1:10)){
     training_set <- glass %>% filter(cv.index != i)
@@ -149,15 +148,32 @@ for (j in (1:5)){
   }
   
   lda.pred<-predict(lda.fit,glass,dimen=j)
-  errors.reduced2[j]<-mean(lda.pred$class!=glass$type)
-
-  errors.reduced1[j]<-mean(errors.test)
+  errors.train.reduced[j]<-mean(lda.pred$class!=glass$type)
+  errors.test.reduced[j]<-mean(errors.test)
 }
-print(errors.reduced1)
-errors.reduced2
+print(errors.train.reduced)
+errors.test.reduced
 ```
 
 
+```{r}
+df <- data.frame(
+  iter  = rep(seq_along(errors.train.reduced), 2),
+  error = c(errors.train.reduced, errors.test.reduced),
+  serie = rep(c("Errors train", "Errors test"), each = length(errors.train.reduced))
+)
+
+ggplot(df, aes(iter, error, colour = serie)) +
+  geom_line(linewidth = 1) +
+  labs(x = "Number of LDA", y = "Error",
+       title = "Comparison Error Curves") +
+  theme_bw()
+
+```
+We prefer classifier with 4 LDA because it has the least amount of test error
+
+
+### Point 5
 
 
 
