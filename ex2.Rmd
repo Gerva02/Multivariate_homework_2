@@ -42,7 +42,36 @@ dim(glass)
 head(glass)
 ```
 
-Before going on to the exercise we need to do a little exploratory analysis of the data set. We start by plotting the relative frequency of each glass type
+La matrice dei dati è composta da 214 osservazioni e 10 variabili, riportate di seguito.
+The matrix *glass* has 214 rows and 10 columns, the 9 predictors are the the following
+* RI: the refractive index, which is adimensional
+* 8 Chemical elements, all express as percentages of oxides of: 
+  * Na: Sodium
+  * Mg: Magnesium
+  * Al: Aluminium
+  * Si: Silicon
+  * K: Potassium
+  * Ca: Calcium
+  * Ba: Barium
+  * Fe: Iron
+  
+* Type : is the type of glass, which is the  __target variable__. Which has 7 possible values.
+
+  1. building_windows_float_processed
+  2. building_windows_non_float_processed
+  3. vehicle_windows_float_processed
+  4. vehicle_windows_non_float_processed 
+  5. containers
+  6. tableware
+  7. headlamps
+
+The target variable is of course analysized as a factor is -r.
+```{r}
+glass %>% is.na() %>% sum()
+```
+Furthermore we check that there are no NAs in the dataset.
+
+Before going on to the exercise we still need to do a little exploratory analysis of the data set. We start by plotting the relative frequency of each glass type
 ```{r}
 #bar plot freq relative
 glass %>%
@@ -50,38 +79,34 @@ glass %>%
   geom_bar() +
   labs(title = "Relative Frequency of Classes",y = "Freq Rel")
 ```
-Such graph carries the 
-
-
-
-```{r}
-glass.train %>% 
-  select(-Type)%>%
-  gather(key = tipo, value=valore)%>%
-  ggplot(mapping= aes(y = valore)) +
-  geom_boxplot()+
-  facet_wrap(~ tipo,scales="free")+
-  labs(title = "Box Plot per ogni variabile")
-```
-
-
-
-
-
-
-
-
-
-
+Such graph carries the same information of the table printed before but makes much clearer that some classes like tableware and containers are under represented in the data set, of course for any discrimination function it will be harder to recognize those classes when other classes are much more prevalent. In fact we notice that the first two classes are about 65% of the data, such situation is generally referred to as unbalanced data (i.e. When some classes have significantly more observation than others), but since no class of glass is more important than others we do not apply any oversampling or undersampling techinque. 
 
 ### Point 1
 \textbf{Point 1}
+Use linear discriminant analysis to predict the glass type. Look at the first two discriminant directions:
+what are the most important variables in separating the classes? Comment.
 
+Before applying the LDA, we check wheter the assumption of the model is verified, namely we check that each variable conditioned on class is normally distributed (i.e. each variable is a mixture of Gaussians) and if the  $\Sigma_i = \Sigma\quad \forall i \in(1,\dots,6) $. We do this trough a violin plot which is a graph that represents each variable
+```{r}
+glass %>%
+  gather(key = Measure, value = value, -type )  %>%
+  ggplot(aes(x = type, y= value, color = Measure)) +
+  geom_violin(trim = F)+ 
+  geom_boxplot(width=0.1) + 
+  facet_wrap( ~ Measure ,scales = "free", ncol =3)+
+  labs(title = "Violin Plot Conditioned on Classes") 
+```
+
+
+We can see that none of the above conditons is respected neither normality , since univariate normaly is not verified it is useless to check multivariate normality.
+
+We procede by fitting the model:
 ```{r}
 lda.fit<-lda(glass$type ~ . ,data=glass)
 lda.fit
 ```
 
+These results are not interpretable beacuse the variable have different unit of measurment to get of such 
 
 ```{r}
 diag(diag(cov(glass[,1:9])** (1/2))) %*% lda.fit$scaling 
@@ -104,19 +129,17 @@ let's check that our linear predictor predicts equally well all
 ```{r}
 lda.pred  <-predict(lda.fit,glass)
 conf.mat<-table(predicted=lda.pred$class,true=glass$type)
-conf.mat<-addmargins(conf.mat)
+conf.mat2<-addmargins(conf.mat)
+conf.mat2
 ```
 
 
 
 
 ```{r}
-#ciclo for direi, creo accurency e c salvo dentro i valori
-accuracies<-c()
-for (i in 1:6) {
-  accuracies[i] <- conf.mat[i, i] / conf.mat[7, i]
-}
-accuracies
+conf.mat<-apply(conf.mat,2,function(x) x/sum(x))
+conf.mat
+diag(conf.mat)
 ```
 prima abbiamo trovato che l'errore medio è 1-training.err:0.6728972. con è gia al limite con 7 giuste su 13, ma il peggio ovviamente è in in Veh dove ne ha azzeccate 0 su 13, anzi peggio, ne ha predictate 3 tutte e tre sbagliate e non ha trovato neanche una di quelle giuste
 
