@@ -9,14 +9,19 @@ date: "2025-05-04"
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Ex 2
-```{r}
+## Exercise 2
+The dataset glass contains data on n = 214 single glass fragments. Each case has a measured refractive
+index (RI) and composition (weight percent of oxides of Na, Mg, Al, Si, K, Ca, Ba and Fe). The composition
+sums to around 100%; what is not anything else is sand. The fragments are classified as six types (variable
+type). The classes are window float glass (WinF), window non float glass (WinNF), vehicle window glass (Veh),
+containers (Con), tableware (Tabl) and vehicle headlamps (Head).
+```{r warning=FALSE}
 library(tidyverse)
 library(MASS)
 library(ellipse)
 library(nnet)
 library(class)
-
+library(mclust)
 ```
 
 
@@ -27,11 +32,43 @@ glass<-read.table("data/glass.txt",header=T)
 glass$type<-factor(glass$type)
 levels(glass$type)<-c("WinF","WinNF","Veh","Con","Tabl","Head")
 table(glass$type)
+```
 
+```{r}
 dim(glass)
+```
 
+```{r}
 head(glass)
 ```
+
+Before going on to the exercise we need to do a little exploratory analysis of the data set. We start by plotting the relative frequency of each glass type
+```{r}
+#bar plot freq relative
+glass %>%
+  ggplot(aes(x = type, y = after_stat(count)/sum(after_stat(count)), fill = type)) + 
+  geom_bar() +
+  labs(title = "Relative Frequency of Classes",y = "Freq Rel")
+```
+Such graph carries the 
+
+
+
+```{r}
+glass.train %>% 
+  select(-Type)%>%
+  gather(key = tipo, value=valore)%>%
+  ggplot(mapping= aes(y = valore)) +
+  geom_boxplot()+
+  facet_wrap(~ tipo,scales="free")+
+  labs(title = "Box Plot per ogni variabile")
+```
+
+
+
+
+
+
 
 
 
@@ -39,6 +76,7 @@ head(glass)
 
 ### Point 1
 \textbf{Point 1}
+
 ```{r}
 lda.fit<-lda(glass$type ~ . ,data=glass)
 lda.fit
@@ -55,6 +93,7 @@ LD2 rimane fortemente influenzata da Mg-Ca-Na-Si (tutti positivi->valori bassi=L
 ### Point 2
 
 ```{r}
+lda.pred  <-predict(lda.fit,glass)
 training_error <- mean(lda.pred$class != glass$type )
 training_error
 ```
@@ -85,8 +124,7 @@ prima abbiamo trovato che l'errore medio è 1-training.err:0.6728972. con è gia
 ### Point 3
 ```{r}
 cv.index <- read.csv("data/groupCV.txt",header = F)
-glass$index <- cv.index
-glass<-tibble(glass)
+glass$cv.index <- cv.index[,]
 ```
 
 
@@ -94,10 +132,10 @@ glass<-tibble(glass)
 ```{r}
 errors <- rep(NA,10)
 for (i in (1:10)){
-  training_set <- glass %>% filter(cv.index != i)
-  test_set <- glass %>% filter(cv.index == i)
-  lda.fit.cv <-lda(training_set$type ~ . , data= training_set)
-  lda.pred.cv <- predict(lda.fit.cv,test_set)
+  training_set <- glass %>% filter(cv.index != i) 
+  test_set <- glass %>% filter(cv.index == i) 
+  lda.fit.cv <-lda(training_set$type ~ . , data= training_set[,1:10])
+  lda.pred.cv <- predict(lda.fit.cv,newdata = test_set[,1:10])
   errors[i]<-mean(lda.pred.cv$class != test_set$type )
 }
 mean(errors)
@@ -137,13 +175,12 @@ for (j in (1:5)){
   errors.test<- rep(NA,10)
 
   for (i in (1:10)){
-    training_set <- glass %>% filter(cv.index != i)
-    test_set <- glass %>% filter(cv.index == i)
+    training_set <- glass %>% filter(cv.index != i) 
+    test_set <- glass %>% filter(cv.index == i) 
     
-    lda.fit.cv <-lda(training_set$type ~ . , data= training_set)
-    lda.pred.test.cv <- predict(lda.fit.cv,test_set, dim = j )
+    lda.fit.cv <-lda(training_set$type ~ .  , data= training_set[,1:10])
+    lda.pred.test.cv <- predict(lda.fit.cv,test_set[,1:10], dim = j )
     errors.test[i]<-mean(lda.pred.test.cv$class != test_set$type )
-    
 
   }
   
@@ -151,8 +188,8 @@ for (j in (1:5)){
   errors.train.reduced[j]<-mean(lda.pred$class!=glass$type)
   errors.test.reduced[j]<-mean(errors.test)
 }
-print(errors.train.reduced)
 errors.test.reduced
+errors.train.reduced
 ```
 
 
@@ -173,7 +210,24 @@ ggplot(df, aes(iter, error, colour = serie)) +
 We prefer classifier with 4 LDA because it has the least amount of test error
 
 
-### Point 5
+### Point 6
+
+
+
+```{r}
+library(e1071) 
+library(caTools)
+library(ggplot2)
+errors <- rep(NA,10)
+for (i in (1:10)){
+  training_set <- glass %>% filter(cv.index != i) 
+  test_set <- glass %>% filter(cv.index == i) 
+  mod<-svm(training_set$type ~ . - cv.index,data=training_set)
+  errors[i]<-mean(predict(mod,test_set) != test_set$type )
+}
+mean(errors)
+```
+
 
 
 
