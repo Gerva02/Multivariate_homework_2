@@ -33,6 +33,9 @@ glass$type<-factor(glass$type)
 levels(glass$type)<-c("WinF","WinNF","Veh","Con","Tabl","Head")
 table(glass$type)
 ```
+```{r}
+t(table(glass$type)) %>% apply(1,function(x) x/sum(x))
+```
 
 ```{r}
 dim(glass)
@@ -86,7 +89,7 @@ Such graph carries the same information of the table printed before but makes mu
 Use linear discriminant analysis to predict the glass type. Look at the first two discriminant directions:
 what are the most important variables in separating the classes? Comment.
 
-Before applying the LDA, we check wheter the assumption of the model is verified, namely we check that each variable conditioned on class is normally distributed (i.e. each variable is a mixture of Gaussians) and if the  $\Sigma_i = \Sigma\quad \forall i \in(1,\dots,6) $. We do this trough a violin plot which is a graph that represents each variable
+Before applying the LDA, we check wheter the assumption of the model is verified, namely we check that each variable conditioned on class is normally distributed (i.e. each variable is a mixture of Gaussians) and if the  $\Sigma_i = \Sigma\quad \forall i \in(1,\dots,6)$. We do this trough a violin plot which is a graph that estimates a non-parametric density (this is to check the normality assumption), and also plots the boxplot (this is to check that the variance assumption).
 ```{r}
 glass %>%
   gather(key = Measure, value = value, -type )  %>%
@@ -97,16 +100,15 @@ glass %>%
   labs(title = "Violin Plot Conditioned on Classes") 
 ```
 
+We can see that none of the above conditons is respected, so we can say that our classifier wont archive very good results (to improve performance we could do box-cox transformation to render the variables more normal-like, but we will stick with the exercise outline). Since univariate normality is not verified it is useless to check multivariate normality.
 
-We can see that none of the above conditons is respected neither normality , since univariate normaly is not verified it is useless to check multivariate normality.
-
-We procede by fitting the model:
+We proceed by fitting the model:
 ```{r}
 lda.fit<-lda(glass$type ~ . ,data=glass)
 lda.fit
 ```
 
-These results are not interpretable beacuse the variable have different unit of measurment to get of such 
+The coefficients like this are not interpretable since the variables have different unit of measurement, to get of such interpenetration we use the following formula $a^{*}=[\text{diag}(\hat{\Sigma})]^{1/2}a$. This formula scales vector of the coefficents based on the variance of each column
 
 ```{r}
 diag(diag(cov(glass[,1:9])** (1/2))) %*% lda.fit$scaling 
@@ -114,18 +116,20 @@ diag(diag(cov(glass[,1:9])** (1/2))) %*% lda.fit$scaling
 LD1 rimane influenzata da Na-Si-Al-Ca (tutti negativi->valori bassi=LD1 alto)
 LD2 rimane fortemente influenzata da Mg-Ca-Na-Si (tutti positivi->valori bassi=LD2 basso)
 
+(interpretetion of this two things to me is completly senseless)
 
 ### Point 2
+Compute the training error. Are there any groups less homogeneous than the others? Comment.
 
+Let's start by computing the traning error:
 ```{r}
 lda.pred  <-predict(lda.fit,glass)
 training_error <- mean(lda.pred$class != glass$type )
 training_error
 ```
-the training error is as such
+In isolation this number is pretty meaningless since we don't know how much our model over-fitted the data.
 
-let's check that our linear predictor predicts equally well all 
-
+We can check how homogeneous the groups are by seeing if our linear predictor predicts equally well all of the classes. We do that by printing the confusion matrix with bouth the absolute:
 ```{r}
 lda.pred  <-predict(lda.fit,glass)
 conf.mat<-table(predicted=lda.pred$class,true=glass$type)
@@ -133,37 +137,48 @@ conf.mat2<-addmargins(conf.mat)
 conf.mat2
 ```
 
-
-
-
+And with the relative values:
 ```{r}
 conf.mat<-apply(conf.mat,2,function(x) x/sum(x))
 conf.mat
+```
+```{r}
 diag(conf.mat)
 ```
-prima abbiamo trovato che l'errore medio è 1-training.err:0.6728972. con è gia al limite con 7 giuste su 13, ma il peggio ovviamente è in in Veh dove ne ha azzeccate 0 su 13, anzi peggio, ne ha predictate 3 tutte e tre sbagliate e non ha trovato neanche una di quelle giuste
+
+From these table it is clear that the most heterogeneous class are the Head,WinF, WinF which are not so coincedly the most common kinds of glass, this means .
+Meanwhile the other 3 are the least homogenus with Veh being the least since every observation belonging to that group has been classified somewhere else.
+Since we don't have any more data is difficult to understand wether more observation could imporve significantly the result or their eterogenity is due to basic carateristics of the materials.
 
 
+  
 ### Point 3
+Implement a 10-fold cross validation using the partition of the observations provided by the variable groupCV to estimate the error rate.Comment
+
+We import the variable cv index and we insert it in the dataframe.
 ```{r}
 cv.index <- read.csv("data/groupCV.txt",header = F)
 glass$cv.index <- cv.index[,]
 ```
-
-
+In this way the cross validation which is usually random becomes a deterministic procedure.
 
 ```{r}
 errors <- rep(NA,10)
 for (i in (1:10)){
-  training_set <- glass %>% filter(cv.index != i) 
-  test_set <- glass %>% filter(cv.index == i) 
+  training_set <- glass[cv.index != i, ]  
+  test_set <- glass[cv.index == i, ]  
   lda.fit.cv <-lda(training_set$type ~ . , data= training_set[,1:10])
   lda.pred.cv <- predict(lda.fit.cv,newdata = test_set[,1:10])
   errors[i]<-mean(lda.pred.cv$class != test_set$type )
 }
 mean(errors)
 ```
-Using the cv we get a more accurate view of the error rate of our classifier since we leverage the law of large numbers 
+Using the cv we get a more accurate view of the error rate of our classifier by allowing our test set to be different for each iteration, in this way we leverage the law of large numbers. Of course the CV error rate is higher than the training error rate because models tend to over fit the training data. This difference is not huge so we can say that our model managed to generalize.
+
+
+### Point 4
+Use the first two discriminant variables for a two-dimensional representation of the data together with centroids by using color-coding for the 6 classes of the class variable type (use lookup color vector
+below). Comment in view of the answer to point 2
 
 
 ```{r}
@@ -180,7 +195,7 @@ data.col<-lookup[glass$type]
 means.hat.z<-aggregate(lda.pred$x,by=list(glass$type),FUN=mean)[,-1]
 plot(LD2~LD1,xlim = c(0.0001, 4), 
      data=lda.pred$x[,1:2],asp=1,pch=16,col=data.col)
-points(means.hat.z[,1],means.hat.z[,2],pch=21,bg=lookup,cex=1.2 )
+points(means.hat.z[,1],means.hat.z[,2],pch=21,bg=lookup,cex=1.5 )
 ```
 
 Però guardando lo scatter ciò non ci sorprende(che il veh sia cosi difficile da sgamare). Blu-Nero e Brown sono dannatamente vicinissimi
@@ -188,7 +203,11 @@ Veh(Brown) è stato confuso 11 volte con WinF(nero) e 3 volte con WinNF (b)
 ciò si ricollega con quanto dicevamo prima, qiesto non è un buon LDA
 
 ### Point 5
+Compute the training error and the 10-fold cross validation error for each reduced-rank LDA classifier.
+Plot both error curves against the number of discriminant directions, add full-rank LDA errors found in
+points 2. and 3. What classifier do you prefer? Comment.
 
+We calculate the CV-errors and training error for each reduced classifier. What we expect is that the training error is monotonically non increasing,since an over-fitted model will always outperform in the training set. Meanwhile it is possible that the most complex wont perform the best since simpler model can generalize better.
 
 ```{r}
 errors.train.reduced<- rep(NA,5)
@@ -215,7 +234,7 @@ errors.test.reduced
 errors.train.reduced
 ```
 
-
+Now we plot the result side to side:
 ```{r}
 df <- data.frame(
   iter  = rep(seq_along(errors.train.reduced), 2),
@@ -230,12 +249,14 @@ ggplot(df, aes(iter, error, colour = serie)) +
   theme_bw()
 
 ```
+As expected the 
+
 We prefer classifier with 4 LDA because it has the least amount of test error
 
 
 ### Point 6
 
-
+We use the support vector machine, we do so because is often considered the best out of the box model.
 
 ```{r}
 library(e1071) 
@@ -251,7 +272,7 @@ for (i in (1:10)){
 mean(errors)
 ```
 
-
+As we can see the CV-error rate drops signlificantly with this method.
 
 
 
