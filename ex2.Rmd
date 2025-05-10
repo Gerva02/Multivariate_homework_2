@@ -9,6 +9,7 @@ date: "2025-05-04"
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+
 ## Exercise 2
 The dataset glass contains data on n = 214 single glass fragments. Each case has a measured refractive
 index (RI) and composition (weight percent of oxides of Na, Mg, Al, Si, K, Ca, Ba and Fe). The composition
@@ -77,12 +78,19 @@ Furthermore we check that there are no NAs in the dataset.
 table(glass$type) %>%t() %>% apply(1,function(x) x/sum(x)) %>% t()
 ```
 Before going on to the exercise we still need to do a little exploratory analysis of the data set. We start by plotting the relative frequency of each glass type
+```{r, include=FALSE, echo =F}
+lookup<-c("black", "blue", "brown", "gray60",
+"green3", "orange")
+names(lookup)<-as.character(unique(glass$type))
+```
+
 ```{r}
 #bar plot freq relative
 glass %>%
   ggplot(aes(x = type, y = after_stat(count)/sum(after_stat(count)), fill = type)) + 
   geom_bar() +
   labs(title = "Relative Frequency of Classes",y = "Freq Rel")+
+  scale_color_manual(values = lookup, aesthetics = "fill", name = "Class")+
   theme_minimal()
 ```
 Such graph carries the same information of the table printed before but makes much clearer that some classes like tableware and containers are under represented in the data set, of course for any discrimination function it will be harder to recognize those classes when other classes are much more prevalent. In fact we notice that the first two classes are about 65% of the data, such situation is generally referred to as unbalanced data (i.e. When some classes have significantly more observation than others), but since no class of glass is more important than others we do not apply any oversampling or undersampling techinque. 
@@ -95,8 +103,10 @@ Before applying the LDA, we check wether the assumption of the model is verified
 ```{r}
 glass %>%
   gather(key = Measure, value = value, -type )  %>%
-  ggplot(aes(x = type, y= value, color = Measure)) +
-  geom_violin(trim = F)+ 
+  ggplot(aes(x = type, y= value, color = 
+               type)) +
+  scale_color_manual(values = lookup, name = "Class")+
+  geom_violin(trim = T)+ 
   geom_boxplot(width=0.1) + 
   facet_wrap( ~ Measure ,scales = "free", ncol =3)+
   labs(title = "Violin Plot Conditioned on Classes") +
