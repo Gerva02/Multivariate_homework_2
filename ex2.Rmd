@@ -15,7 +15,7 @@ index (RI) and composition (weight percent of oxides of Na, Mg, Al, Si, K, Ca, B
 sums to around 100%; what is not anything else is sand. The fragments are classified as six types (variable
 type). The classes are window float glass (WinF), window non float glass (WinNF), vehicle window glass (Veh),
 containers (Con), tableware (Tabl) and vehicle headlamps (Head).
-```{r warning=FALSE}
+```{r warning=FALSE, echo= FALSE, include=FALSE}
 library(tidyverse)
 library(MASS)
 library(ellipse)
@@ -33,9 +33,7 @@ glass$type<-factor(glass$type)
 levels(glass$type)<-c("WinF","WinNF","Veh","Con","Tabl","Head")
 table(glass$type)
 ```
-```{r}
-t(table(glass$type)) %>% apply(1,function(x) x/sum(x))
-```
+
 
 ```{r}
 dim(glass)
@@ -45,10 +43,11 @@ dim(glass)
 head(glass)
 ```
 
-La matrice dei dati è composta da 214 osservazioni e 10 variabili, riportate di seguito.
 The matrix *glass* has 214 rows and 10 columns, the 9 predictors are the the following
+
 * RI: the refractive index, which is adimensional
 * 8 Chemical elements, all express as percentages of oxides of: 
+
   * Na: Sodium
   * Mg: Magnesium
   * Al: Aluminium
@@ -74,22 +73,25 @@ glass %>% is.na() %>% sum()
 ```
 Furthermore we check that there are no NAs in the dataset.
 
+```{r}
+table(glass$type) %>%t() %>% apply(1,function(x) x/sum(x)) %>% t()
+```
 Before going on to the exercise we still need to do a little exploratory analysis of the data set. We start by plotting the relative frequency of each glass type
 ```{r}
 #bar plot freq relative
 glass %>%
   ggplot(aes(x = type, y = after_stat(count)/sum(after_stat(count)), fill = type)) + 
   geom_bar() +
-  labs(title = "Relative Frequency of Classes",y = "Freq Rel")
+  labs(title = "Relative Frequency of Classes",y = "Freq Rel")+
+  theme_minimal()
 ```
 Such graph carries the same information of the table printed before but makes much clearer that some classes like tableware and containers are under represented in the data set, of course for any discrimination function it will be harder to recognize those classes when other classes are much more prevalent. In fact we notice that the first two classes are about 65% of the data, such situation is generally referred to as unbalanced data (i.e. When some classes have significantly more observation than others), but since no class of glass is more important than others we do not apply any oversampling or undersampling techinque. 
 
 ### Point 1
-\textbf{Point 1}
 Use linear discriminant analysis to predict the glass type. Look at the first two discriminant directions:
 what are the most important variables in separating the classes? Comment.
 
-Before applying the LDA, we check wheter the assumption of the model is verified, namely we check that each variable conditioned on class is normally distributed (i.e. each variable is a mixture of Gaussians) and if the  $\Sigma_i = \Sigma\quad \forall i \in(1,\dots,6)$. We do this trough a violin plot which is a graph that estimates a non-parametric density (this is to check the normality assumption), and also plots the boxplot (this is to check that the variance assumption).
+Before applying the LDA, we check wether the assumption of the model is verified, namely we check that each variable conditioned on class is normally distributed (i.e. each variable is a mixture of Gaussians) and if the  $\Sigma_i = \Sigma\quad \forall i \in(1,\dots,6)$ where $\Sigma_i$ is the variance structure of each group. We do this trough a violin plot which is a graph that estimates the density in a  non-parametric way (this is to check the normality assumption), and also plots the boxplot (this is to check that the variance assumption).
 ```{r}
 glass %>%
   gather(key = Measure, value = value, -type )  %>%
@@ -97,7 +99,9 @@ glass %>%
   geom_violin(trim = F)+ 
   geom_boxplot(width=0.1) + 
   facet_wrap( ~ Measure ,scales = "free", ncol =3)+
-  labs(title = "Violin Plot Conditioned on Classes") 
+  labs(title = "Violin Plot Conditioned on Classes") +
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
 We can see that none of the above conditons is respected, so we can say that our classifier wont archive very good results (to improve performance we could do box-cox transformation to render the variables more normal-like, but we will stick with the exercise outline). Since univariate normality is not verified it is useless to check multivariate normality.
@@ -129,7 +133,7 @@ training_error
 ```
 In isolation this number is pretty meaningless since we don't know how much our model over-fitted the data.
 
-We can check how homogeneous the groups are by seeing if our linear predictor predicts equally well all of the classes. We do that by printing the confusion matrix with bouth the absolute:
+We can check how homogeneous the groups are by seeing if our linear predictor predicts equally well all of the classes. We do that by printing the confusion matrix with both the absolute value:
 ```{r}
 lda.pred  <-predict(lda.fit,glass)
 conf.mat<-table(predicted=lda.pred$class,true=glass$type)
@@ -146,10 +150,9 @@ conf.mat
 diag(conf.mat)
 ```
 
-From these table it is clear that the most heterogeneous class are the Head,WinF, WinF which are not so coincedly the most common kinds of glass, this means .
-Meanwhile the other 3 are the least homogenus with Veh being the least since every observation belonging to that group has been classified somewhere else.
-Since we don't have any more data is difficult to understand wether more observation could imporve significantly the result or their eterogenity is due to basic carateristics of the materials.
-
+From these table it is clear that the most heterogeneous class are the Head,WinF, WinF which are not so coincidentally the most common kinds of glass.
+Meanwhile the other 3 are the least homogeneous with Veh being the least since every observation belonging to that group has been classified somewhere else.
+Since we don't have any more data is difficult to understand whether more observation could improve significantly the result or their heterogeneity is due to basic characteristics of the materials.
 
   
 ### Point 3
@@ -173,7 +176,7 @@ for (i in (1:10)){
 }
 mean(errors)
 ```
-Using the cv we get a more accurate view of the error rate of our classifier by allowing our test set to be different for each iteration, in this way we leverage the law of large numbers. Of course the CV error rate is higher than the training error rate because models tend to over fit the training data. This difference is not huge so we can say that our model managed to generalize.
+Using the CV we get a more accurate view of the error rate of our classifier by allowing our test set to be different for each iteration, in this way we leverage the law of large numbers. Of course the CV error rate is higher than the training error rate because models tend to overfit the training data. This difference is not huge so we can say that our model managed to generalize.
 
 
 ### Point 4
@@ -185,29 +188,49 @@ below). Comment in view of the answer to point 2
 lookup<-c("black", "blue", "brown", "gray60",
 "green3", "orange")
 names(lookup)<-as.character(unique(glass$type))
-
+lookup
 ```
 
 
 
 ```{r}
 data.col<-lookup[glass$type]
-means.hat.z<-aggregate(lda.pred$x,by=list(glass$type),FUN=mean)[,-1]
-plot(LD2~LD1,xlim = c(0.0001, 4), 
-     data=lda.pred$x[,1:2],asp=1,pch=16,col=data.col)
-points(means.hat.z[,1],means.hat.z[,2],pch=21,bg=lookup,cex=1.5 )
-```
+means.hat.z<-aggregate(lda.pred$x,by=list(glass$type),FUN=mean)
+#plot(LD2~LD1, 
+     #data=lda.pred$x[,1:2],pch=16,col=data.col)
+#points(means.hat.z[,1],means.hat.z[,2],pch=21,bg=lookup,cex=1.5, lwd=2, col="red")
 
-Però guardando lo scatter ciò non ci sorprende(che il veh sia cosi difficile da sgamare). Blu-Nero e Brown sono dannatamente vicinissimi
-Veh(Brown) è stato confuso 11 volte con WinF(nero) e 3 volte con WinNF (b)
-ciò si ricollega con quanto dicevamo prima, qiesto non è un buon LDA
+LDscores <-tibble(
+  LD1 = lda.pred$x[,1],
+  LD2 = lda.pred$x[,2],
+  TYPE = glass$type,
+)
+
+LDscores %>%
+  ggplot(mapping=aes(x = LD1, y = LD2,col = TYPE))+
+  geom_point( alpha  =0.5)+
+  scale_color_manual(values = data.col, name = "Class")+
+  geom_point(data = tibble(means.hat.z)[,1:3],
+    aes(x= LD1, y= LD2, colour = Group.1),           
+    shape  = 16,                         
+    size   = 6,
+    stroke = 1.4 
+  )+
+  labs(title = "Scatterplot of Linear Discriminant") +
+  theme_minimal()
+
+```
+The bigger points represent the centroids for each group, that is the mean of the first two LDs for each class.
+The scatter plot clearly highlights the patterns previously observed in the confusion matrix, emphasizing which classes are more isolated, which are less so, and which ones are more likely to be confused with others. In particular, the orange class, corresponding to the Head type of glass, appears to be the most distinctly separated. Conversely, the brown class, Veh, is the less homogenous, as it is positioned between the WinF and WinNF classes.
+We also observe that the blue and grey classes, Con and WinNF, are easily confounded, as reflected in the confusion matrix, where 5 out of 13 Con instances were misclassified as WinNF.
 
 ### Point 5
+
 Compute the training error and the 10-fold cross validation error for each reduced-rank LDA classifier.
 Plot both error curves against the number of discriminant directions, add full-rank LDA errors found in
 points 2. and 3. What classifier do you prefer? Comment.
 
-We calculate the CV-errors and training error for each reduced classifier. What we expect is that the training error is monotonically non increasing,since an over-fitted model will always outperform in the training set. Meanwhile it is possible that the most complex wont perform the best since simpler model can generalize better.
+We calculate the CV-errors and training error for each reduced classifier. What we expect is that the training error is monotonically non increasing, since an over-fitted model will always outperform in the training set. Meanwhile it is possible that the most complex wont perform the best since simpler model can generalize better.
 
 ```{r}
 errors.train.reduced<- rep(NA,5)
@@ -243,33 +266,50 @@ df <- data.frame(
 )
 
 ggplot(df, aes(iter, error, colour = serie)) +
-  geom_line(linewidth = 1) +
+  geom_line(linewidth = 1, linetype= 2) +
+  geom_point(size   = 4)+
   labs(x = "Number of LDA", y = "Error",
        title = "Comparison Error Curves") +
   theme_bw()
 
 ```
-As expected the 
-
-We prefer classifier with 4 LDA because it has the least amount of test error
+As expected the Errors in the training set are monotonically non increasing and they are below the error in the test set.
+Further is clear the we prefer classifier with 4 LDA since it has the lowest CV-error.
 
 
 ### Point 6
 
-We use the support vector machine, we do so because is often considered the best out of the box model.
 
+We use the support vector machine, we do so because is often considered the best out of the box model.
 ```{r}
 library(e1071) 
 library(caTools)
 library(ggplot2)
+library(class)
+
 errors <- rep(NA,10)
+errorsKNN <- rep(NA,10)
+
 for (i in (1:10)){
-  training_set <- glass %>% filter(cv.index != i) 
-  test_set <- glass %>% filter(cv.index == i) 
-  mod<-svm(training_set$type ~ . - cv.index,data=training_set)
-  errors[i]<-mean(predict(mod,test_set) != test_set$type )
+  training_set <- glass %>% filter(cv.index != i)  %>% dplyr::select(-cv.index)
+  test_set <- glass %>% filter(cv.index == i)  %>%dplyr::select(-cv.index)
+  mod<-svm(training_set$type ~ . ,data=training_set)
+  errors[i]<-mean(predict(mod,test_set) == test_set$type )
+ 
+  mu<- colMeans(training_set[1:9])
+  va<- diag(cov(training_set[1:9]))
+  training_scale <- cbind( training_set[1:9] %>% scale() , training_set[10]) 
+  test_scale<- cbind(test_set[1:9] %>% scale(center= mu, scale =va) , test_set[10])
+  test_pred <- knn(
+                 train = training_set[1:9], 
+                 test = test_set[1:9],
+                 cl = training_scale$type, 
+                 k=2
+                 )
+  errorsKNN[i]<-mean(test_pred == test_scale$type )
 }
 mean(errors)
+mean(errorsKNN)
 ```
 
 As we can see the CV-error rate drops signlificantly with this method.
