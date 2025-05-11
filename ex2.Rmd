@@ -218,13 +218,13 @@ LDscores <-tibble(
 
 LDscores %>%
   ggplot(mapping=aes(x = LD1, y = LD2,col = TYPE))+
-  geom_point( alpha  =0.5)+
+  geom_point( alpha  =0.4)+
   scale_color_manual(values = data.col, name = "Class")+
   geom_point(data = tibble(means.hat.z)[,1:3],
     aes(x= LD1, y= LD2, colour = Group.1),           
-    shape  = 16,                         
-    size   = 6,
-    stroke = 1.4 
+    shape  = 3,                         
+    size   = 3,
+    stroke = 2 
   )+
   labs(title = "Scatterplot of Linear Discriminant") +
   theme_minimal()
@@ -289,7 +289,6 @@ Further is clear the we prefer classifier with 4 LDA since it has the lowest CV-
 
 ### Point 6
 
-
 We use the support vector machine, we do so because is often considered the best out of the box model.
 ```{r}
 library(e1071) 
@@ -298,31 +297,34 @@ library(ggplot2)
 library(class)
 
 errors <- rep(NA,10)
-errorsKNN <- rep(NA,10)
+errorsKNN <- matrix(rep(NA,100),ncol= 10 , nrow= 50 ) 
 
 for (i in (1:10)){
   training_set <- glass %>% filter(cv.index != i)  %>% dplyr::select(-cv.index)
   test_set <- glass %>% filter(cv.index == i)  %>%dplyr::select(-cv.index)
   mod<-svm(training_set$type ~ . ,data=training_set)
-  errors[i]<-mean(predict(mod,test_set) == test_set$type )
+  errors[i]<-mean(predict(mod,test_set) != test_set$type )
  
   mu<- colMeans(training_set[1:9])
   va<- diag(cov(training_set[1:9]))
   training_scale <- cbind( training_set[1:9] %>% scale() , training_set[10]) 
   test_scale<- cbind(test_set[1:9] %>% scale(center= mu, scale =va) , test_set[10])
+  
+  for (j in (1:50)){
   test_pred <- knn(
                  train = training_set[1:9], 
                  test = test_set[1:9],
                  cl = training_scale$type, 
-                 k=2
+                 k= j
                  )
-  errorsKNN[i]<-mean(test_pred == test_scale$type )
+  errorsKNN[j,i]<-mean(test_pred != test_scale$type )
+  }
 }
 mean(errors)
-mean(errorsKNN)
+apply(errorsKNN, 1 , FUN=mean ) 
 ```
 
-As we can see the CV-error rate drops signlificantly with this method.
+As we can see the CV-error rate drops significantly with this methods ,this is beacuse the methods are much more forgiving then the others
 
 
 
