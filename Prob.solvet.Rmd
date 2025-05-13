@@ -1,0 +1,753 @@
+
+---
+title: "Problem Set 2"
+author: |
+  Leonardo Federico De Blasio (974948)  
+  Simone Maria Gervasoni (1155376)  
+  Alice Leto (1166310)  
+  Marinella Nigro (950475)
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 3
+---
+\newpage
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+
+## Exercise 1
+The data set *pulp_paper* contains measurements of properties of pulp fibers and 
+the paper made from them. There are n = 62 observations on 4 paper properties: 
+breaking length (BL), elastic modulus (EM), stress at failure (SF), burst 
+strength (BS); and 4 pulp fiber characteristics: arithmetic fiber length (AFL), 
+long fiber fraction (LFF), fine fiber fraction (FFF), zero span tensile (ZST).
+
+
+```{r warning=FALSE, echo= FALSE, include=FALSE}
+library(tidyverse)
+library(MASS)
+library(ellipse)
+library(nnet)
+library(class)
+library(mclust)
+library(e1071)
+library(caTools)
+library(ggplot2)
+library(class)
+```
+
+```{r}
+pulp_paper<-read.table("data/pulp_paper.txt",header=T)
+names(pulp_paper)<- c("BL" ,"EM" ,"SF" ,"BS","AFL", "LFF", "FFF", "ZST")
+dim(pulp_paper)
+```
+
+```{r}
+head(pulp_paper)
+```
+Let's explain what the variables represent:
+
+BL – Breaking Length: the length at which the paper breaks, a measure of its tensile strength.
+
+EM – Elastic Modulus: the elastic modulus, indicates how stiff the paper is.
+
+SF – Stress at Failure: the stress at which the paper fails, another measure of strength.
+
+BS – Burst Strength: the pressure required to rupture the paper.
+
+AFL – Arithmetic Fiber Length: the average fiber length.
+
+LFF – Long Fiber Fraction: the fraction of long fibers in the sample.
+
+FFF – Fine Fiber Fraction: the fraction of fine fibers.
+
+ZST – Zero Span Tensile: a measure of the internal strength of the fibers, independent of their length.
+
+### Point 1
+
+Obtain the maximum likelihood solution for m = 2 and m = 3 common factors on the standardize
+observations and compute the proportion of total sample variance due to each factor. List the estimated
+communalities, specific variances, and the residual matrix $S-(\hat{L}\hat{L}^T+\Psi)$. Compare the results. Which choice of m do you prefer? Why?
+
+
+To proceed with the Factor analysis using the Maximum Likelihood method we need that the normality assumption of the data must be satisfied.   
+We investigate it using the Mahalanobis distance. 
+```{r}
+# Calculate the Mahalanobis distances 
+pulp_paper_scaled <- scale(pulp_paper)
+n <- nrow(pulp_paper_scaled)
+bar.x<-colMeans(pulp_paper_scaled)
+S = cov(pulp_paper_scaled)
+p= ncol(pulp_paper)
+d <- mahalanobis(pulp_paper_scaled, center = bar.x, cov = S)
+chi2_quantiles <- qchisq(ppoints(d), df = p)
+sorted_d <- sort(d)
+# Q-Q plot
+ggplot(cbind(chi2_quantiles, sorted_d), aes(x = chi2_quantiles, y = sorted_d)) +
+geom_point( color = "blue", size = 1) +
+geom_abline(slope = 1, intercept = 0, color = "red") +
+theme_minimal() +
+  labs(title = "Q-Q plot of the Malahnobis Distances", x = "Chi-squared quantiles",
+y = "Sorted Mahalanobis Distances")
+```
+
+As we can see the initial points lie approximately on the reference line, suggesting that most of the data follow a multivariate normal distribution.
+However, some points, particularly in the upper tail, deviate noticeably from the line, suggesting the presence of potential multivariate outliers or a deviation from normality. In the latter case, the use of the Maximum Likelihood method may not be appropriate, and the Principal Component Method might be a better choice.  
+Anyways following the text we apply the ML method to our data.
+
+At first we want to visualize the correlation matrix of the data *pulp_paper* to observe whether any underlying groupings become apparent. 
+```{r}
+S <- cor(pulp_paper)
+round(S,3)
+```
+As we can see from the correlation matrix almost all the variables are positive correlated except for the variable *FFF*, which is negative correlated with all the others variables.  
+Some variable show a very high correlation -like *BL*, *EM*, *SF*, *BS* and *AFL*, *LFF*, *ZST*- within each other and low correlation between the other ones that, heuristically make sense because they are the properties related to the paper and the properties related to the fiber.  
+This makes us think that there could be two factors, however although the correlation within each group of variables (those associated with the same factor) is high, the correlation between the other variables outside the group are not so low to suggest us the independence of two dimension, so we need to investigate further with factor analysis.
+
+So in order to proceed with the factor analysis we fix m=2 and apply the command
+factanal(), which uses the maximum likelihood method, to the standardized data.  
+We decide to use the rotation to have a better interpretation of the loadings. 
+```{r}
+fa.ml<-factanal(x=pulp_paper_scaled, factors=2, rotation="varimax")
+fa.ml
+```
+We extract the loadings ($l_{jk}$ where $j$ represents the number of variables so $1 \leq j \leq 8$, while $k$ represents the number of factors so $k=1,2$) in order to say something about the factors.
+```{r}
+names(fa.ml)
+L<-fa.ml$loadings[,]
+round(L,3)
+```
+What can we say about Factor1 and Factor2?  
+As we supposed above using the correlation matrix Factor1 is related to the strength of the paper, in fact it shows high loadings for *BL*, *EM*, *SF*, and *BS*, which are all variables related to paper properties. Therefore, we can interpret Factor1 as representing the strength or robustness of the paper.  
+Factor2, on the other hand, has high loadings for *AFL*, *LFF*, and *FFF*, which are all related to fiber dimension, suggesting that Factor2 reflects fiber length.  
+The loadings related to variable *ZST* are similar for both factors, indicating that it is influenced by both paper strength and fiber length.
+
+Now we extract the other elements: the uniqueness, the communalities and the residual matrix. 
+
+The uniqueness values indicate the proportion of variance that is not explained by the common factors. In the factanal() output, they correspond to the variances of the specific factors, denoted as $var(\epsilon_j)$ where $\epsilon_j$ represent the random errors (specific factors).  
+According to factor analysis theory $var(\epsilon_j)=\psi_j$ where $\Psi$ is a diagonal matrix containing these uniquenesses.
+```{r}
+round(fa.ml$uniquenesses,3)
+Psi<-diag(fa.ml$uniquenesses)
+```
+As we can see the only factor with high specific variance is *FFF*, this means that this
+variable is not well explained by the extration of the two factors. In contrast, the other uniqueness values are very small, indicating that the remaining variables are well explained by the model. 
+
+
+We extract the communalities of every variable which are calculate using the loadings, in particular using the formula: $h_j^2=l_{j1}^2+l_{j2}^2+\ldots+l_{jm}^2$, and we verify that the sum of uniquenesses and communalities for each variable is equal 1 (as seen in theory for standardized variables).  
+Alternatively, the communalities can be expressed as $h_j^2=1-\psi_j$ representing the proportion of variance explained by the common factors.
+```{r}
+comm<-diag(crossprod(t(fa.ml$loadings)))
+comm
+round(fa.ml$uniquenesses+comm,3)
+```
+Now we want to find the residual.   
+At first we define the matrix $\hat{S}=L^TL+\Psi$, where $L$ is the loadings matrix and $\Psi$ the diagonal matrix of the uniquenesses.   
+The matrix $\hat{S}$ represents the estimated correlation matrix derived from the method we have applied.  
+Then we calculate what is the error, how much the estimated values differ from the real ones. 
+```{r}
+S.hat<-L%*%t(L)+Psi; 
+round(S.hat,3)
+Residual<-S-S.hat
+round(Residual,3)
+res <- sum(Residual^2)
+res
+```
+As we can see the error rate is 0.1064641 which is very low, so the model fit quite well our data. 
+
+The proportion of the sample variance we can be seen directly from factanal() command or we can compute it  using the loadings. 
+```{r}
+cum <- sum(diag(crossprod(fa.ml$loadings))/p*100)
+prop_var <- round(c(diag(crossprod(fa.ml$loadings))/p*100, cum),1)
+names(prop_var) <- c("Prop of var of Factor1", "Prop of var of Factor2", 
+                     "Cumulative prop of var")
+prop_var
+```
+There is not a big difference between the proportion of variance explained by the first and second factors and this is due to the fact that we have used the varimax rotation.   
+Anyway the two factors together explain the 88% of the variance which is a good proportion, so m=2 is a good candidate for the factor analysis.
+
+Now repeat all of this using m=3.
+```{r}
+fa.ml_new<-factanal(x=pulp_paper_scaled, factors=3, rotation = "varimax")
+fa.ml_new
+```
+Loadings
+```{r}
+L_new<-fa.ml_new$loadings[,]
+round(L_new,3)
+```
+Factor1 is consistent with the previous analysis and represents the strength of the paper.  
+Factor2 now has high loadings for *AFL*, *LFF*, *FFF* and *ZST* suggesting it represents fiber length.  
+Factor3 shows relatively “high” loadings only for the variables *EM*, *FFF*, and *ZST*, but these values do not exceed the commonly accepted threshold of 0.5/0.6, and therefore cannot be considered significant for interpretation purposes. As a result, we are unable to provide a meaningful interpretation for this factor. 
+
+
+Specific variances
+```{r}
+round(fa.ml_new$uniquenesses,3)
+Psi_new<-diag(fa.ml_new$uniquenesses)
+```
+As above the only bigger value between the other is FFF which is less then the value obtained for m=2, but still quite big.
+
+Communalities
+```{r}
+comm_new<-diag(crossprod(t(fa.ml_new$loadings)))
+round(fa.ml_new$uniquenesses+comm_new,3)
+```
+Residuals
+```{r}
+S.hat_new<-L_new%*%t(L_new)+Psi_new
+round(S.hat_new,3)
+Residual_new<-S-S.hat_new
+round(Residual_new,3)
+res_new <- sum(Residual_new^2) 
+res_new
+```
+The final error is pretty small 0.003930445 for m=3 with respect then the other for m=2, in fact the estimated correlation matrix is the same as the original one. 
+
+Proportion of variance 
+```{r}
+cum_new <- sum(diag(crossprod(fa.ml_new$loadings))/p*100)
+prop_var_new <- round(c(diag(crossprod(fa.ml_new$loadings))/p*100, cum_new),1)
+names(prop_var_new) <- c("Prop of var of Factor1", "Prop of var of Factor2", 
+                     "Prop of var of Factor 3", "Cumulative prop of var")
+prop_var_new
+```
+
+As before the first factor explain most of the variance 48%, while the second factor explain another 37% and third factor only 8%, so the cumulative proportion of the variance explained, is 93% which is high, and this is not necessarily positive since we might have an overfitting of the data. 
+
+Now put everything together 
+```{r}
+#Factor quantities for m=2
+output1 <-list( "factors"=fa.ml$loadings[,1:2], 
+                "communalities"= diag(crossprod(t(fa.ml$loadings))),
+                "uniquenesses" = fa.ml$uniquenesses, 
+                "prop_of_variance"=round(cum, 3), 
+                "residual matrix"=Residual)
+output1
+
+#Factor quantities for m=3
+output2 <-list( "factors"=fa.ml_new$loadings[,1:3], 
+                "communalities"= diag(crossprod(t(fa.ml_new$loadings))),
+                "uniquenesses" = fa.ml_new$uniquenesses, 
+                "prop_of_variance"=round(cum_new, 3), 
+                "residual matrix"=Residual_new)
+output2
+```
+How many factors may we choose?  
+We observe that:
+
+
+1. With m = 2, the proportion of total variance explained by the factors is 88%, whereas with m = 3 it is 93%. However, the third factor only explains an additional 8% of the variance, which might be negligible.
+
+
+2. When we have 3 factors, the third one does not have high loading values, meaning its contribution to the variables is low—almost insignificant—so it does not add interpretability to the model.
+
+
+3. As for the final error, it is 0.1065 for m = 2, while it drops to 0.0039 for m = 3, which is very small. This could indicate that the model fits the data too well and might lead to overfitting.
+
+
+4. Regarding the specific variance of the variable *FFF*, in both cases it is not well explained by the model. The difference between the proportion of variance explained by the two model for it is $0.416-0.307=0.109$, which is not relevant enough to decide the value of m.
+
+Therefore, after making all these considerations, we choose m = 2 factors.
+
+### Point 2 
+
+Give an interpretation to the common factors in the m = 2 solution.
+```{r}
+fa.ml<-factanal(x=pulp_paper_scaled, factors=2, rotation = "varimax")
+round(fa.ml$loadings[,],3)
+```
+Interpretation:  
+As we know from the theory higher values for loadings means that higher is the contributions of the factor to the variables, so Factor1 has very high value for *BL*, *EM*, *SF*, *BS* which are the variables related to the paper, so the Factor1 represents the strength of the paper.
+For Factor2 we have high values for *AFL*, *LFF*, *FFF*. All these properties are related to the length of the fibers; this second factor can be interpreted as fiber length. FFF has a negative loading on Factor2, reinforcing the idea that longer fibers (high *AFL* and *LFF*) are associated with fewer fine fibers (low *FFF*), which is consistent with fiber dimension.  
+We notice that the variable *ZST* has moderately high loadings on both factors, indicating that it may be influenced by both the overall strength of the paper and the properties of the fibers.     
+
+
+Overall, the factor structure aligns well with the expected grouping: paper properties on one side, and fiber morphology on the other.  
+
+Also in order to have a better visualization of these factors we decide to visualize them in a plot
+```{r}
+var.names<-names(pulp_paper)
+plot(Factor2~Factor1,data=fa.ml$loadings[,],type="n",
+xlim=c(-0.6,1),ylim=c(-1,1), main="pulp paper data (ML)")
+text(Factor2~Factor1,data=fa.ml$loadings[,],labels=var.names)
+abline(h=0,v=0,lty=2)
+```
+
+The variables *BL*, *EM*, *SF*, *BS* are close to the first axis as they are represented by the Factor1, 
+the variables *AFL*, *LFF* are closer to the second axis then to the first, and also if we plot *FFF* in absolute value we will find it near *AFL* and *LFF*.  
+In this way we can clearly see the subdivision into two groups represented by the two factors. We notice also the position of *ZST* which is between the two groups (indicating that it is influenced by both as we said before).
+
+### Point 3
+
+Make a scatterplot of the factor scores for m = 2 obtained by the regression method. Is their correlation
+equal to zero? Should we expect so? Comment.
+
+Factor scores are numerical estimates of the latent factor for each observation. They indicate how strongly each observation is associated with factor identified in factor analysis. 
+```{r}
+fa.ml<-factanal(x=pulp_paper_scaled, factors=2, rotation="varimax", 
+                scores="regression")
+fa.ml$scores[1,]
+```
+How can we interpret the factor scores?
+The factor scores of the first observation tell us that this type of paper has slightly below-average paper strength and a lower proportion of the long fiber with more fine fiber.
+```{r}
+plot(fa.ml$scores[,1],fa.ml$scores[,2],pch=16,
+xlab="ML1",ylab="ML2",main="Factor scores distribtuion", col="skyblue2")
+abline(a=0,b=0, col= "red", lty=2)
+abline(a=1,b=0, col= "black", lty=2)
+abline(a=-1,b=0, col= "black", lty=2)
+```
+
+From the plot, we observe that the factor scores are distributed differently along the two axes: along ML2 (Factor2), the scores are mostly concentrated in the range between -1 and 1, whereas along ML1 (Factor1), they are spread over a much wider range, since we know that Factor1 explains more variance. Further not all values are clustered between -1 and 1 for ML2. In fact, we can observe some outliers, which are values that represent a much higher or lower score for ML2 compared to the average.  
+This suggests that there is greater variability among the observations with respect to the first factor (associated with paper strength), while the second factor (associated with fiber length) shows more limited variability. 
+This indicates that the different types of paper in the dataset vary more in terms of their strength than in terms of fiber length.  
+From a theoretical perspective, we know that the factors are uncorrelated, so we expect the correlation between the factor scores to be zero.  
+As a result from the plot, we can hypothesize that paper strength does not significantly depend on fiber length: even when strength varies greatly, fiber length remains relatively stable.   
+So the lack of correlation suggests that paper strength is influenced by other elements not directly related to fiber length.  
+
+Now we compute the correlation 
+```{r}
+cor(fa.ml$scores[,1],fa.ml$scores[,2])
+```
+We observe that the correlation between the factor scores is very close to 0. In fact, based on the plot, we had already hypothesized that there was no strong correlation.
+
+### Point 4
+
+Suppose we have a new observation (15.5, 5.5, 2,-0.55, 0.6, 65,-5, 1.2). Calculate the corresponding
+m = 2 factor scores and add this bivariate point to the plot in 3. How is it placed compared to the rest
+of the n = 62 points? Could you tell without computing the factor scores? Comment.
+
+Our goal is to estimate this information using the data previously obtained.  
+As a first step, we standardize the new observation using the mean and variance vectors from the pulp_paper dataset.
+```{r}
+new_obs <- c(15.5, 5.5, 2, -0.55, 0.6, 65, -5, 1.2)
+new_obs_mat <- matrix(new_obs, nrow = 1)
+#mean vector
+mu<- as.numeric(colMeans(pulp_paper))
+#variance vector 
+v <- as.numeric(diag(cov(pulp_paper)))
+new_obs_scaled <- scale(new_obs_mat, center=mu, scale=sqrt(v)) 
+#new observation rescaled 
+new_obs_s <- new_obs_scaled[1,]
+names(new_obs_s)<- c("BL" ,"EM" ,"SF" ,"BS","AFL", "LFF", "FFF", "ZST")
+```
+Now we calculate factor scores using the following formula: $\hat{f_i}=\hat{L}^TS^{-1}x$ where:
+
+- $\hat{f_i}$ are the factor scores;
+- $\hat{L}^T$ is the loadings matrix;
+- $S^{-1}$ is the correlation matrix;
+- $x$ is the scaled observation.
+
+As we have seen in theory we use the correlation matrix $S$ and not the estimated one $\hat{L}\hat{L}^T+ \hat{\Psi}$ in order to reduce possibly incorrect determination of the number of factors. 
+
+```{r}
+#compute the factor score of the point 
+lambda.inv <- solve(S) %*% fa.ml$loadings
+point <- new_obs_s  %*% lambda.inv
+point
+```
+
+```{r}
+plot(fa.ml$scores[,1],fa.ml$scores[,2],pch=16,xlim = c(-5,5), ylim=c(-5,5),
+xlab="ML1",ylab="ML2",main="Factor scores distribtuion", col="skyblue2")
+points(point,col="red")
+```
+
+As we can see from the position of the factor scores in the plot, the new observation is an outlier. 
+
+We can arrive to the same conclusion even without computing the scores, in fact if we look to the mean and the variance of *pulp_paper* and to the new observation : 
+```{r}
+matrix <-rbind(mu, sqrt(v) , new_obs, new_obs_s)
+rownames(matrix) <- c("pulp's mean", "pulp's standard deviation", "new obs", 
+                      "new obs scaled")
+colnames(matrix) <- c("BL" ,"EM" ,"SF" ,"BS","AFL", "LFF", "FFF", "ZST")
+matrix
+```
+
+We can observe that the new observation shows values that differ significantly from the dataset's averages. 
+For example, the *LFF* variable has a value of 65, while the dataset's mean is around 39. Similarly, *FFF* has a value of -5, whereas its mean is approximately 26.67. This suggests that the new observation deviates substantially from the data used in our analysis. Moreover, since *FFF* represents a percentage, it is mathematically impossible for it to take a negative value.
+Looking to *ZST* for the rescaled new obs we can see that this observation corresponds to a z-score of approximately 4.52. This indicates that the new value lies 4.5 standard deviations above the mean.   
+This strongly indicates that the data point is anomalous, possibly due to a measurement error.
+
+
+
+
+
+## Exercise 2
+The dataset glass contains data on n = 214 single glass fragments. Each case has a measured refractive
+index (RI) and composition (weight percent of oxides of *Na, Mg, Al, Si, K, Ca, Ba* and *Fe*). The composition
+sums to around 100%; what is not anything else is sand. The fragments are classified as six types (variable
+*type*).  
+The classes are window float glass (WinF), window non float glass (WinNF), vehicle window glass (Veh),
+containers (Con), tableware (Tabl) and vehicle headlamps (Head).
+
+
+
+
+
+```{r cars}
+glass<-read.table("data/glass.txt",header=T)
+glass$type<-factor(glass$type)
+levels(glass$type)<-c("WinF","WinNF","Veh","Con","Tabl","Head")
+table(glass$type)
+```
+
+
+```{r}
+dim(glass)
+```
+
+```{r}
+head(glass)
+```
+
+The matrix *glass* has 214 rows and 10 columns, the 9 predictors are the the following
+
+* RI: the refractive index, which is adimensional
+* 8 Chemical elements, all express as percentages of oxides of: 
+
+  * Na: Sodium
+  * Mg: Magnesium
+  * Al: Aluminium
+  * Si: Silicon
+  * K: Potassium
+  * Ca: Calcium
+  * Ba: Barium
+  * Fe: Iron
+  
+* Type : is the type of glass, which is the  __target variable__. Which has 6 possible values.
+
+  1. building_windows_float_processed
+  2. building_windows_non_float_processed
+  3. vehicle_windows
+  4. containers
+  5. tableware
+  6. headlamps
+
+The target variable is of course analysized as a factor is R.
+```{r}
+glass %>% is.na() %>% sum()
+```
+Furthermore we check that there are no NAs in the dataset.
+
+```{r}
+table(glass$type) %>%t() %>% apply(1,function(x) x/sum(x)) %>% t()
+```
+Before going on to the exercise we still need to do a little exploratory analysis of the data set. We start by plotting the relative frequency of each glass type
+```{r, include=FALSE, echo =F}
+lookup<-c("black", "blue", "brown", "gray60",
+"green3", "orange")
+names(lookup)<-as.character(unique(glass$type))
+```
+
+```{r}
+#bar plot freq relative
+glass %>%
+  ggplot(aes(x = type, y = after_stat(count)/sum(after_stat(count)), fill = type)) + 
+  geom_bar() +
+  labs(title = "Relative Frequency of Classes",y = "Freq Rel")+
+  scale_color_manual(values = lookup, aesthetics = "fill", name = "Class")+
+  theme_minimal()
+```
+Such graph carries the same information of the table printed above but makes much clearer that some classes like tableware and containers are under represented in the data set, of course for any discrimination function it will be harder to recognize those classes when others are much more prevalent. In fact we notice that the first two classes are about 65% of the data, such situation is generally referred to as unbalanced data (i.e. when some classes have significantly more observation than others).Since no class of glass is more important than others we do not apply any oversampling or undersampling techinque. 
+
+### Point 1
+Use linear discriminant analysis to predict the glass type. Look at the first two discriminant directions:
+what are the most important variables in separating the classes? Comment.
+
+Before applying the LDA, we check whether the assumptions of the model are verified, namely we check that each variable conditioned on class is normally distributed (i.e. each variable is a mixture of Gaussians) and if the  $\Sigma_i = \Sigma\quad \forall i \in(1,\dots,6)$ where $\Sigma_i$ is the variance structure of each group. We do this through a violin plot which is a graph that estimates the density in a  non-parametric way (this is to check the normality assumption), and it also plots the boxplot (this is to check that the variance assumption).
+```{r}
+glass %>%
+  gather(key = Measure, value = value, -type )  %>%
+  ggplot(aes(x = type, y= value, color = 
+               type)) +
+  scale_color_manual(values = lookup, name = "Class")+
+  geom_violin(trim = T)+ 
+  geom_boxplot(width=0.1) + 
+  facet_wrap( ~ Measure ,scales = "free", ncol =3)+
+  labs(title = "Violin Plot Conditioned on Classes") +
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+We can see that none of the above conditions are respected, so we can say that our classifier won't achieve very good results. Since univariate normality is not verified it is useless to check multivariate normality.
+
+We proceed by fitting the model:
+```{r}
+lda.fit<-lda(glass$type ~ . ,data=glass)
+lda.fit
+```
+
+These coefficients are not interpretable since the variables have different unit of measurement.  
+To get such interpretation we use the following formula $a^{*}=[\text{diag}(\hat{\Sigma})]^{1/2}a$ which scales the vector of coefficients based on the variance of each column.
+
+```{r}
+lda.matrix<-diag(diag(cov(glass[,1:9])** (1/2))) %*% lda.fit$scaling 
+rownames(lda.matrix) <- c("RI", "Na", "Mg", "Al", "Si", "K", "Ca", "Ba", "Fe")
+lda.matrix
+```
+
+The first linear discriminant (LD1) is primarily influenced by sodium (*Na*), silicon (*Si*), and aluminum (*Al*), all of which have negative coefficients. This implies that lower values in these variables contribute to higher LD1 scores.  
+The second discriminant (LD2) is mainly driven by magnesium (*Mg*), calcium (*Ca*), with all associated coefficients being positive. Consequently, lower values in these variables correspond to lower LD2 scores.  
+Although calcium (*Ca*) also plays a significant role in LD1, we choose to adopt a more conservative approach: since calcium has a strong impact on LD2, we prefer to consider it primarily in that context. For the same reason, we exclude sodium and silicon when interpreting LD2, as they already contribute meaningfully to LD1.  
+Based on research conducted — supported by attached articles and bibliography — we can explain the relevance of these variables:  
+
+- Silicon (*Si*) is the most important raw material in glass production. This is clearly reflected in the dataset, where *Si* accounts for, on average, more than 70% of every glass type. However, since its melting point is very high, various chemical compounds are added to reduce it. Many of these compounds are sodium-based, which explains the importance of Na in the dataset.
+
+- Aluminum (*Al*) acts as a stabilizer, reinforcing the glass network and improving the chemical properties of the material. It has high thermal conductivity and low electrical conductivity. 
+Indeed, we observe lower levels of*Al*in glass types such as *Veh*, *WinF*, and *WinNF*, where high thermal conductivity is undesirable: excessive conductivity would lead to rapid heat transfer between the inside and outside, resulting in overheating in summer and excessive cold in winter.
+Conversely, high levels of *Al* are found in *Head* glass, which benefits from minimal electrical conductivity, thereby reducing the risk of current-related issues.
+
+- Magnesium (*Mg*) also acts as a stabilizer, making the glass more resistant to environmental factors. High levels of *Mg* are associated with greater durability and resistance to weathering. This makes *Mg* a valuable feature for distinguishing glass types used in vehicles and buildings. Accordingly, we observe the highest *Mg* levels in the *WinF*, *WinNF*, and *Veh* categories.
+
+- *Ca* has a high coefficient in LD2 suggests it plays an important role in distinguishing everyday glass (like window and container glass, richer in *Ca* for durability and stability) from technical glass (like headlamps or tableware, which may use less *Ca* or substitute other stabilizers).
+
+### Point 2
+Compute the training error. Are there any groups less homogeneous than the others? Comment.
+
+Let's start by computing the training error:
+```{r}
+lda.pred  <-predict(lda.fit,glass)
+training_error <- mean(lda.pred$class != glass$type )
+training_error
+```
+This number taken in isolation is pretty meaningless since we don't know how much our model over-fitted the data.
+
+We can check how homogeneous the groups are by verifying if our linear predictor predicts equally well all of the classes. We do that by printing the confusion matrix with both the absolute value:
+```{r}
+lda.pred  <-predict(lda.fit,glass)
+conf.mat<-table(predicted=lda.pred$class,true=glass$type)
+conf.mat2<-addmargins(conf.mat)
+conf.mat2
+```
+
+And with the relative values:
+```{r}
+conf.mat<-apply(conf.mat,2,function(x) x/sum(x))
+conf.mat
+```
+```{r}
+diag(conf.mat)
+```
+
+We define a glass type as homogeneous if it is consistently and accurately predicted in the classification results, meaning that most or all of its instances are correctly identified.
+From these table it is clear that the most homogeneous class are the *Head*, *WinF*, *WinNF* which are not so coincidentally the most common kinds of glass.
+Meanwhile the other 3 are less homogeneous with *Veh* being the least since every observation belonging to that group has been classified somewhere else.
+Further we notice that  *WinF* and *WinNF*, even though get predicted with fairly high accuracy, get often mixed up from this we can deduce that these two group are fairly similar.
+Instead the group Head is the most homogeneous and the most different with other groups since it gets seldom mistaken . 
+Since we don't have any more data is difficult to understand whether more observation could improve significantly the result or their heterogeneity is due to basic characteristics of the materials.
+
+  
+### Point 3
+Implement a 10-fold cross validation using the partition of the observations provided by the variable groupCV to estimate the error rate. Comment
+
+We import the variable *cv.index* and we insert it in the dataframe.
+```{r}
+cv.index <- read.csv("data/groupCV.txt",header = F)
+glass$cv.index <- cv.index[,]
+```
+The variable *cv.index* contains values from 1 to 10 randomly assigned to each observation. These values will be used as indices for a 10-fold cross-validation procedure. In each iteration, all observations with index "i"(from 1 to 10) will be temporarily excluded from the dataset and will form the test set. A Linear Discriminant Analysis (LDA) model will be trained on the remaining data (i.e., the training set), and the resulting model will be used to predict the classes of the excluded test set.
+The classification error will be computed for each test set, and this procedure will be repeated for all 10 folds. Finally, the average of the 10 classification errors will be calculated to provide an overall estimate of the model's predictive error.
+
+
+```{r}
+errors <- rep(NA,10)
+for (i in (1:10)){
+  training_set <- glass[cv.index != i, ]  
+  test_set <- glass[cv.index == i, ]  
+  lda.fit.cv <-lda(training_set$type ~ . , data= training_set[,1:10])
+  lda.pred.cv <- predict(lda.fit.cv,newdata = test_set[,1:10])
+  errors[i]<-mean(lda.pred.cv$class != test_set$type )
+}
+mean(errors)
+```
+Using CV provides a more accurate view of the error rate of our classifier by allowing the test set to be different in each iteration. The CV error rate is typically higher than the training error rate because models tend to overfit the training data. Since the difference is not substantial, we can conclude that the model has managed to generalize well.
+Since the indexes of cross validation are given, the procedure becomes a deterministic ones (i.e. we don't need to set a seed).  
+
+
+### Point 4
+Use the first two discriminant variables for a two-dimensional representation of the data together with centroids by using color-coding for the 6 classes of the class variable type (use lookup color vector
+below). Comment in view of the answer to point 2.
+
+
+```{r}
+lookup<-c("black", "blue", "brown", "gray60",
+"green3", "orange")
+names(lookup)<-as.character(unique(glass$type))
+lookup
+```
+
+
+
+```{r}
+data.col<-lookup[glass$type]
+means.hat.z<-aggregate(lda.pred$x,by=list(glass$type),FUN=mean)
+#plot(LD2~LD1, 
+     #data=lda.pred$x[,1:2],pch=16,col=data.col)
+#points(means.hat.z[,1],means.hat.z[,2],pch=21,bg=lookup,cex=1.5, lwd=2, col="red")
+
+LDscores <-tibble(
+  LD1 = lda.pred$x[,1],
+  LD2 = lda.pred$x[,2],
+  TYPE = glass$type,
+)
+
+LDscores %>%
+  ggplot(mapping=aes(x = LD1, y = LD2,col = TYPE))+
+  geom_point( alpha  =0.4)+
+  scale_color_manual(values = data.col, name = "Class")+
+  geom_point(data = tibble(means.hat.z)[,1:3],
+    aes(x= LD1, y= LD2, colour = Group.1),           
+    shape  = 3,                         
+    size   = 3,
+    stroke = 2 
+  )+
+  labs(title = "Scatterplot of Linear Discriminant") +
+  theme_minimal()
+```
+The crosses represent the centroids for each group, that is the mean of the score of each observation of LD1 and LD2 for each class.
+The scatter plot clearly highlights the patterns previously observed in the confusion matrix, emphasizing which classes are more isolated, which are less so, and which ones are more likely to be confused with others. In particular, the orange class, corresponding to the Head type of glass, appears to be the most distinctly separated. Conversely, the brown class, Veh, is the less homogenous, as it is positioned between the WinF and WinNF classes.
+We also observe that the blue and grey classes, Con and WinNF, are easily confounded, as reflected in the confusion matrix, where 5 out of 13 Con instances were misclassified as WinNF.
+
+### Point 5
+
+Compute the training error and the 10-fold cross validation error for each reduced-rank LDA classifier.
+Plot both error curves against the number of discriminant directions, add full-rank LDA errors found in
+points 2. and 3. What classifier do you prefer? Comment.
+
+We calculate the CV-errors and training error for each reduced classifier.  
+We will now proceed to compute the cross-validation error, as done previously, but this time extending the analysis to all reduced rank LDA discriminant.  
+We expect that the training error is monotonically non increasing, since an over-fitted model will always outperform in the training set. Meanwhile it is possible that the most complex won't perform the best since simpler models can generalize better.
+
+```{r}
+errors.train.reduced<- rep(NA,5)
+errors.test.reduced<- rep(NA,5)
+
+for (j in (1:5)){
+  errors.test<- rep(NA,10)
+
+  for (i in (1:10)){
+    training_set <- glass %>% filter(cv.index != i) 
+    test_set <- glass %>% filter(cv.index == i) 
+    #error of reduced rank j on the test set recovered
+    lda.fit.cv <-lda(training_set$type ~ .  , data= training_set[,1:10])
+    lda.pred.test.cv <- predict(lda.fit.cv,test_set[,1:10], dim = j )
+    errors.test[i]<-mean(lda.pred.test.cv$class != test_set$type )
+
+  }
+  #error on the training set recovered
+  lda.pred<-predict(lda.fit,glass,dimen=j)
+  errors.train.reduced[j]<-mean(lda.pred$class!=glass$type)
+  errors.test.reduced[j]<-mean(errors.test)
+}
+errors.test.reduced
+errors.train.reduced
+```
+
+Now we plot the result side to side:
+```{r}
+df <- data.frame(
+  iter  = rep(seq_along(errors.train.reduced), 2),
+  error = c(errors.train.reduced, errors.test.reduced),
+  serie = rep(c("Errors train", "Errors test"), each = length(errors.train.reduced))
+)
+
+ggplot(df, aes(iter, error, colour = serie)) +
+  geom_line(linewidth = 1, linetype= 2) +
+  geom_point(size   = 4)+
+  labs(x = "Number of LDA", y = "Error",
+       title = "Comparison Error Curves") +
+  theme_bw()
+
+```
+
+As expected the training set error is monotonically non increasing and is below the test set error.  
+It is evident that two 'elbows' can be identified at 2 and 4 LDA. The advantage of using 2 LDA is that it has fewer LDA coefficients, resulting in a simpler analysis at the cost of approximately 5% more error. On the other hand, the 4 LDA provides a more detailed analysis and generalizes better since it has the lowest CV-error.
+
+### Point 6
+(Optional) Find a classification rule that improves on the CV error rate estimates found in point 5.
+Feel free to use any classification method, even one not covered in class.
+
+We apply the K-Nearest Neighbors(KNN) model because as we have seen from the exploratory data analysis the data is deeply non-linear and any model that relies on regularity condition of the distribution of the data would fail to generalize the complex nature of the distribution.
+Simply the K-nearest neighbors classifier is a non parametric supervised learning method, the model classifies a test observation $x_0$ based on the average label among its nearby neighbors, when a tie exists the class is chosen randomly.  
+Given a positive integer $K$ and a test observation $x_0$, the KNN classifier first identifies $\mathcal{N}_0$ the set containing the $K$ points in the training data that are closest to $x_0$.  
+
+The KNN estimates the conditional probability for class $j$ as the fraction of points in $\mathcal{N}_0$ whose response values(predicted values) $y_i$ equal j: 
+$$ \mathbb{P}(Y=j \big| X=x_0 ) = \frac{1}{K} \sum_{i \in \mathcal{N}_0} \mathbb{I}(y_i = j) $$
+Finally, it applies the Bayes rule to classify the test observation $x_0$ into the class with the largest probability.
+
+We apply a cross validation in the following code to decide which hyper parameters is the best.
+
+```{r}
+#we need it because the tie-breaking mechanism is random
+set.seed(1234)
+errorsKNN <- matrix(rep(NA,100),ncol= 10 , nrow= 20 )
+
+for (i in (1:10)){
+  #derive training and test set
+  training_set <- glass %>% filter(cv.index != i)  %>% dplyr::select(-cv.index)
+  test_set <- glass %>% filter(cv.index == i)  %>%dplyr::select(-cv.index)
+
+  # set mean and variance of the training set chose
+  mu<- colMeans(training_set[1:9])
+  va<- diag(cov(training_set[1:9]))
+  #scale the train 
+  training_scale <- cbind( training_set[1:9] %>% 
+                             scale(center= mu, scale = sqrt(va))
+                           , training_set[10])
+  #scale the test with the means and variances of the training set
+  test_scale<- cbind(test_set[1:9] %>% scale(center= mu,
+                                             scale = sqrt(va)) , test_set[10])
+ 
+  #CV for each k from 1 to 20
+  for (j in (1:20)){
+  test_pred <- knn(
+                 train = training_scale[,1:9],
+                 test = test_scale[,1:9],
+                 cl = training_scale$type,
+                 k= j
+                 )
+  errorsKNN[j,i]<-mean(test_pred != test_scale$type )
+  }
+}
+# do the mean row wise
+errors_cv<-apply(errorsKNN, 1 , FUN=mean )
+#plot the errors for each k 
+tibble(err=errors_cv,
+       index= seq(1,20)) %>%
+  ggplot(aes(y=err, x=index)) +
+  geom_line(color="blue",linewidth = 1, linetype= 2) +
+  geom_point(color="blue", size   = 4)+
+  geom_point(data= tibble(err=errors_cv,
+       index= seq(1,20))[2,]
+       ,col= "red", size   = 4)+
+  labs(x = "Hyperparameter k", y = "Error",
+       title = "CV error for varying levels of K")+
+  theme_minimal()
+```
+
+We see that the best possible CV-error is achieved by k=2 which manages to beat the reduced-rank LDA classifier by around 6%.
+
+```{r}
+(errors.test.reduced[4] - errors_cv[2]) *100
+```
+
+The shape of the above graph was predictable indeed the highly jagged boundaries determined by the KNN (with hyper-parameter 2) were to be expected with this kind of data which has deeply non standard distribution, meanwhile with higher values of k the boundaries get much smoother but it's clear that the classifier loses classification power.
+
+
+
+
+
+
+
+
+
+
+
